@@ -1,4 +1,6 @@
 export interface IAppHeaderForm {
+  mjid: string;
+  sid: string;
   emkl: string;
   ratePajak: string;
   rateBonus: string;

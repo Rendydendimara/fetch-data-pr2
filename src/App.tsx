@@ -1,8 +1,8 @@
 import { Input } from '@chakra-ui/input';
-import { Box, Container, Flex, Text } from '@chakra-ui/layout';
+import { Box, Flex, Text } from '@chakra-ui/layout';
 import { Modal, ModalContent, ModalOverlay } from '@chakra-ui/modal';
 import { Spinner } from '@chakra-ui/spinner';
-import { Table, Tbody, Td, Tfoot, Th, Thead, Tr } from '@chakra-ui/table';
+import { Table, Tbody, Td, Th, Thead, Tr } from '@chakra-ui/table';
 import React, { useEffect, useState } from 'react';
 import Select, { ActionMeta, OnChangeValue, StylesConfig } from 'react-select';
 import {
@@ -29,17 +29,31 @@ const CONFIG_FETCH = {
   headers: { 'Access-Control-Allow-Origin': '*' },
 };
 
-const convertUSDFormat = (num: string, type: 'IDR' | 'USD'): string => {
-  if (type === 'IDR') {
-    return Number(num)
-      .toFixed(2)
-      .replace(/\d(?=(\d{3})+\.)/g, '$&,');
+export const convertUSDFormat = (
+  num: number,
+  type: 'IDR' | 'USD' | 'NominalDollar'
+): string => {
+  const fixNum = num; // Number(num.toString().replaceAll('.', ''));
+  if (fixNum < 1) {
+    return String(fixNum);
   } else {
-    return '';
-    // return num.toLocaleString('en-US', {
-    //   style: 'currency',
-    //   currency: 'USD',
-    // }); /* $2,500.00 */
+    if (type === 'IDR') {
+      return new Intl.NumberFormat('en-ID', {
+        style: 'currency',
+        currency: 'IDR',
+      })
+        .format(fixNum)
+        .replace(/[IDR]/gi, '')
+        .replace(/(\.+\d{2})/, '')
+        .trimLeft();
+      // parseFloat((a-b).toFixed(2));
+    } else if (type === 'USD') {
+      return num.toLocaleString('en-US', {
+        currency: 'USD',
+      });
+    } else {
+      return num.toString();
+    }
   }
 };
 
@@ -81,10 +95,18 @@ function App() {
   const [dataTabelDetailSelling, setDataTabelDetailSelling] = useState<any[]>(
     []
   );
+  const [dataTabelBuyingHumico, setDataTabelBuyingHumico] = useState<any[]>([]);
+  const [title, setTitle] = useState<string>('');
+  const [lokasiStuffing, setLokasiStuffing] = useState<any>('');
+  const [dataAktifBuy, setDataAktifBuy] = useState<any[]>([]);
+  const [dataAktifSell, setDataAktifSell] = useState<any[]>([]);
   const [isLoadingFetch, setIsLoadingFetch] = useState<boolean>(false);
+  const [isLoadingFetchPost, setIsLoadingFetchPost] = useState<boolean>(false);
   const [listDataBuying, setListDataBuying] = useState<IDataBuying[]>([]);
   const [listDataSelling, setListDataSelling] = useState<IDataSeling[]>([]);
   const [dataAppHeaderForm, setDataAppHeaderForm] = useState<IAppHeaderForm>({
+    mjid: '',
+    sid: '',
     emkl: '',
     ratePajak: '',
     rateBonus: '',
@@ -106,6 +128,11 @@ function App() {
   const [idEditFormBuying, setIdEditFormBuying] = useState<number | null>(null);
   const [idEditFormSelling, setIdEditFormSelling] =
     useState<number | null>(null);
+  const [isEditExitsAktifBuy, setIsEditExitsAktifBuy] =
+    useState<boolean>(false);
+  const [isEditExitsAktifSell, setIsEditExitsAktifSell] =
+    useState<boolean>(false);
+  const [listContainer, setListContainer] = useState<any[]>([]);
 
   const getDataJobsheetID = async () => {
     // const response = await ApiGetDataJobsheetID();
@@ -115,7 +142,6 @@ function App() {
       CONFIG_FETCH
     );
 
-    console.log('response', response);
     if (response.status === 200) {
       let temp: ISelectJobSheetID[] = [];
       if (response.data.hasOwnProperty('hasil')) {
@@ -130,18 +156,10 @@ function App() {
     }
   };
 
-  const handleChangeJobSheetID = (
-    newValue: OnChangeValue<ISelectJobSheetID, false>,
-    actionMeta: ActionMeta<any>
-  ) => {
-    console.log('newValue', newValue);
-  };
-
   const handleChangeJobSheetIDBuying = (
     newValue: OnChangeValue<ISelectJobSheetID, false>,
     actionMeta: ActionMeta<any>
   ) => {
-    console.log('newValue', newValue);
     setDataBuyingForm({
       ...dataBuyingForm,
       fixIsiJobsheetID: newValue,
@@ -152,9 +170,8 @@ function App() {
     newValue: OnChangeValue<ISelectJobSheetID, false>,
     actionMeta: ActionMeta<any>
   ) => {
-    console.log('newValue', newValue);
     setDataSellingForm({
-      ...dataBuyingForm,
+      ...dataSellingForm,
       fixIsiJobsheetID: newValue,
     });
   };
@@ -162,91 +179,156 @@ function App() {
   const handleChangeDataAppHeaderForm = (
     event: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
   ) => {
-    setDataAppHeaderForm({
-      ...dataAppHeaderForm,
-      [event.target.name]: event.target.value,
-    });
+    if (event.target.name === 'emkl') {
+      setDataAppHeaderForm({
+        ...dataAppHeaderForm,
+        [event.target.name]: event.target.value,
+      });
+    } else {
+      const re = /^([0-9]|[^,$\w])*$/;
+      let num = event.target.value; // .replaceAll(',', '');
+      if (event.target.value === '' || re.test(num)) {
+        setDataAppHeaderForm({
+          ...dataAppHeaderForm,
+          [event.target.name]: num,
+        });
+      }
+    }
   };
 
   const handleChangeDataFormBuying = (
     event: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
   ) => {
-    if (event.target.name === 'kurs' && event.target.value === '999') {
-      setDataBuyingForm({
-        ...dataBuyingForm,
-        [event.target.name]: event.target.value,
-        nominalDollar: '',
-      });
-    } else {
-      setDataBuyingForm({
-        ...dataBuyingForm,
-        [event.target.name]: event.target.value,
-      });
+    const re = /^([0-9]|[^,$\w])*$/;
+    let num = event.target.value; // .replaceAll(',', '');
+    if (event.target.value === '' || re.test(num)) {
       let temp = {
         ...dataBuyingForm,
-        [event.target.name]: event.target.value,
+        [event.target.name]: num,
       };
-      if (temp.kurs && temp.nominalDipakai1IDR2USD && temp.nominal) {
-        const nominal = Number(temp.nominal) / Number(temp.kurs);
-        temp = {
-          ...temp,
-          nominalDollar: String(nominal),
-        };
-      } else {
-        temp = {
+      if (temp.kurs === '999' || temp.nominal === '999') {
+        setDataBuyingForm({
           ...temp,
           nominalDollar: '',
-        };
+        });
+      } else {
+        if (event.target.name === 'nominal' || event.target.name === 'kurs') {
+          // nominal + kurs = dollar
+          const nominal = Number(temp.nominal) / Number(temp.kurs);
+          temp = {
+            ...temp,
+            nominalDollar: String(
+              nominal == Infinity ? 0 : isNaN(nominal) ? 0 : nominal
+            ),
+          };
+          setDataBuyingForm(temp);
+        } else if (
+          event.target.name === 'nominalDollar' ||
+          event.target.name === 'kurs'
+        ) {
+          // dollar + kurs = nominal
+          const nominal = Number(temp.nominalDollar) * Number(temp.kurs);
+          temp = {
+            ...temp,
+            nominal: String(
+              nominal == Infinity ? 0 : isNaN(nominal) ? 0 : nominal
+            ),
+          };
+          setDataBuyingForm(temp);
+        } else {
+          setDataBuyingForm({
+            ...temp,
+          });
+        }
       }
-      setDataBuyingForm(temp);
     }
   };
 
   const handleChangeDataFormSelling = (
     event: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
   ) => {
-    if (event.target.name === 'kurs' && event.target.value === '999') {
-      setDataSellingForm({
-        ...dataSellingForm,
-        [event.target.name]: event.target.value,
-        nominalDollar: '',
-      });
-    } else {
+    const re = /^([0-9]|[^,$\w])*$/;
+    let num = event.target.value; // .replaceAll(',', '');
+    if (event.target.value === '' || re.test(num)) {
       let temp = {
         ...dataSellingForm,
-        [event.target.name]: event.target.value,
+        [event.target.name]: num,
       };
-      if (temp.kurs && temp.nominalDipakai1IDR2USD && temp.nominal) {
-        const nominal = Number(temp.nominal) / Number(temp.kurs);
-        temp = {
-          ...temp,
-          nominalDollar: String(nominal),
-        };
-      } else {
-        temp = {
+      if (temp.kurs === '999' || temp.nominal === '999') {
+        setDataSellingForm({
           ...temp,
           nominalDollar: '',
-        };
+        });
+      } else {
+        if (event.target.name === 'nominal' || event.target.name === 'kurs') {
+          // nominal + kurs = dollar
+          const nominal = Number(temp.nominal) / Number(temp.kurs);
+          temp = {
+            ...temp,
+            nominalDollar: String(
+              nominal == Infinity ? 0 : isNaN(nominal) ? 0 : nominal
+            ),
+          };
+          setDataSellingForm(temp);
+        } else if (
+          event.target.name === 'nominalDollar' ||
+          event.target.name === 'kurs'
+        ) {
+          // dollar + kurs = nominal
+          const nominal = Number(temp.nominalDollar) * Number(temp.kurs);
+          temp = {
+            ...temp,
+            nominal: String(
+              nominal == Infinity ? 0 : isNaN(nominal) ? 0 : nominal
+            ),
+          };
+          setDataSellingForm(temp);
+        } else {
+          setDataSellingForm({
+            ...temp,
+          });
+        }
       }
-      setDataSellingForm(temp);
     }
   };
 
   const handleAddUpdateListDataBuying = () => {
     if (idEditFormBuying) {
-      const indexData = findIndex(listDataBuying, ['id', idEditFormBuying]);
-      setListDataBuying([
-        ...listDataBuying.slice(0, indexData),
-        {
-          id: idEditFormBuying,
-          fixIsiJobsheetID: dataBuyingForm.fixIsiJobsheetID,
-          nominalDipakai1IDR2USD: dataBuyingForm.nominalDipakai1IDR2USD,
-          nominal: dataBuyingForm.nominal,
-          kurs: dataBuyingForm.kurs,
-          nominalDollar: dataBuyingForm.nominalDollar,
-        },
-        ...listDataBuying.slice(indexData + 1, listDataBuying.length),
-      ]);
+      if (isEditExitsAktifBuy) {
+        // update data aktif buy from API
+        const indexData = findIndex(dataAktifBuy, [
+          'id',
+          String(idEditFormBuying),
+        ]);
+        setDataAktifBuy([
+          ...dataAktifBuy.slice(0, indexData),
+          {
+            ...dataAktifBuy[indexData],
+            id: String(idEditFormBuying),
+            fix_isijobsheet_id: dataBuyingForm.fixIsiJobsheetID?.value ?? '',
+            nominaldipakai: dataBuyingForm.nominalDipakai1IDR2USD,
+            nominal: dataBuyingForm.nominal,
+            kurs: dataBuyingForm.kurs,
+            nominaldolar: dataBuyingForm.nominalDollar,
+          },
+          ...dataAktifBuy.slice(indexData + 1, dataAktifBuy.length),
+        ]);
+        setIsEditExitsAktifBuy(false);
+      } else {
+        const indexData = findIndex(listDataBuying, ['id', idEditFormBuying]);
+        setListDataBuying([
+          ...listDataBuying.slice(0, indexData),
+          {
+            id: idEditFormBuying,
+            fixIsiJobsheetID: dataBuyingForm.fixIsiJobsheetID,
+            nominalDipakai1IDR2USD: dataBuyingForm.nominalDipakai1IDR2USD,
+            nominal: dataBuyingForm.nominal,
+            kurs: dataBuyingForm.kurs,
+            nominalDollar: dataBuyingForm.nominalDollar,
+          },
+          ...listDataBuying.slice(indexData + 1, listDataBuying.length),
+        ]);
+      }
       setIdEditFormBuying(null);
       toast({
         title: 'Success',
@@ -284,22 +366,42 @@ function App() {
     }
     handleClearFormData('buying');
   };
-
   const handleAddUpdateListDataSelling = () => {
     if (idEditFormSelling) {
-      const indexData = findIndex(listDataSelling, ['id', idEditFormSelling]);
-      setListDataSelling([
-        ...listDataSelling.slice(0, indexData),
-        {
-          id: idEditFormSelling,
-          fixIsiJobsheetID: dataSellingForm.fixIsiJobsheetID,
-          nominalDipakai1IDR2USD: dataSellingForm.nominalDipakai1IDR2USD,
-          nominal: dataSellingForm.nominal,
-          kurs: dataSellingForm.kurs,
-          nominalDollar: dataSellingForm.nominalDollar,
-        },
-        ...listDataSelling.slice(indexData + 1, listDataSelling.length),
-      ]);
+      if (isEditExitsAktifSell) {
+        const indexData = findIndex(dataAktifSell, [
+          'id',
+          String(idEditFormSelling),
+        ]);
+        setDataAktifSell([
+          ...dataAktifSell.slice(0, indexData),
+          {
+            ...dataAktifSell[indexData],
+            id: String(idEditFormSelling),
+            fix_isijobsheet_id: dataSellingForm.fixIsiJobsheetID?.value ?? '',
+            nominaldipakai: dataSellingForm.nominalDipakai1IDR2USD,
+            nominal: dataSellingForm.nominal,
+            kurs: dataSellingForm.kurs,
+            nominaldolar: dataSellingForm.nominalDollar,
+          },
+          ...dataAktifSell.slice(indexData + 1, dataAktifSell.length),
+        ]);
+        setIsEditExitsAktifBuy(false);
+      } else {
+        const indexData = findIndex(listDataSelling, ['id', idEditFormSelling]);
+        setListDataSelling([
+          ...listDataSelling.slice(0, indexData),
+          {
+            id: idEditFormSelling,
+            fixIsiJobsheetID: dataSellingForm.fixIsiJobsheetID,
+            nominalDipakai1IDR2USD: dataSellingForm.nominalDipakai1IDR2USD,
+            nominal: dataSellingForm.nominal,
+            kurs: dataSellingForm.kurs,
+            nominalDollar: dataSellingForm.nominalDollar,
+          },
+          ...listDataSelling.slice(indexData + 1, listDataSelling.length),
+        ]);
+      }
       setIdEditFormSelling(null);
       toast({
         title: 'Success',
@@ -356,9 +458,24 @@ function App() {
         nominalDollar: '',
       });
     }
+    if (isEditExitsAktifBuy) {
+      setIsEditExitsAktifBuy(false);
+    }
+    if (isEditExitsAktifSell) {
+      setIsEditExitsAktifSell(false);
+    }
+    if (idEditFormBuying !== null) {
+      setIdEditFormBuying(null);
+    }
+    if (idEditFormSelling !== null) {
+      setIdEditFormSelling(null);
+    }
   };
 
   const handleEditDataBuying = (id: number) => {
+    if (isEditExitsAktifBuy) {
+      setIsEditExitsAktifBuy(false);
+    }
     let selectedData = listDataBuying.filter(
       (data: IDataBuying) => data.id === id
     );
@@ -373,6 +490,30 @@ function App() {
       });
     }
   };
+
+  const handleEditDataAktifBuy = (id: number) => {
+    let selectedData = dataAktifBuy.filter(
+      (data: any) => Number(data.id) === id
+    );
+
+    if (selectedData.length > 0) {
+      let fixIsiJobsheetID = listSelectJobSheetID.filter(
+        (job: ISelectJobSheetID) =>
+          job.value === selectedData[0].fix_isijobsheet_id
+      );
+      setIdEditFormBuying(id);
+      setIsEditExitsAktifBuy(true);
+      setDataBuyingForm({
+        fixIsiJobsheetID:
+          fixIsiJobsheetID[0] ?? selectedData[0].fix_isijobsheet_id,
+        nominalDipakai1IDR2USD: selectedData[0].nominaldipakai,
+        nominal: selectedData[0].nominal,
+        kurs: selectedData[0].kurs,
+        nominalDollar: selectedData[0].nominaldolar,
+      });
+    }
+  };
+
   const handleDeleteDataBuying = (id: number) => {
     const newDataBuying = listDataBuying.filter(
       (data: IDataBuying) => data.id !== id
@@ -380,7 +521,15 @@ function App() {
     setListDataBuying(newDataBuying);
   };
 
+  const handleDeleteDataAktifBuy = (id: number) => {
+    const newData = dataAktifBuy.filter((data: any) => Number(data.id) !== id);
+    setDataAktifBuy(newData);
+  };
+
   const handleEditDataSelling = (id: number) => {
+    if (isEditExitsAktifSell) {
+      setIsEditExitsAktifSell(false);
+    }
     let selectedData = listDataSelling.filter(
       (data: IDataSeling) => data.id === id
     );
@@ -396,6 +545,34 @@ function App() {
     }
   };
 
+  const handleEditDataAktifSell = (id: number) => {
+    let selectedData = dataAktifSell.filter(
+      (data: any) => Number(data.id) === id
+    );
+
+    if (selectedData.length > 0) {
+      let fixIsiJobsheetID = listSelectJobSheetID.filter(
+        (job: ISelectJobSheetID) =>
+          job.value === selectedData[0].fix_isijobsheet_id
+      );
+      setIdEditFormSelling(id);
+      setIsEditExitsAktifSell(true);
+      setDataSellingForm({
+        fixIsiJobsheetID:
+          fixIsiJobsheetID[0] ?? selectedData[0].fix_isijobsheet_id,
+        nominalDipakai1IDR2USD: selectedData[0].nominaldipakai,
+        nominal: selectedData[0].nominal,
+        kurs: selectedData[0].kurs,
+        nominalDollar: selectedData[0].nominaldolar,
+      });
+    }
+  };
+
+  const handleDeleteDataAktifSell = (id: number) => {
+    const newData = dataAktifSell.filter((data: any) => Number(data.id) !== id);
+    setDataAktifSell(newData);
+  };
+
   const handleDeleteDataSelling = (id: number) => {
     const newDataSelling = listDataSelling.filter(
       (data: IDataSeling) => data.id !== id
@@ -408,12 +585,47 @@ function App() {
       `/api/apcargo/public/admin/getJSData/${id}`,
       CONFIG_FETCH
     );
-    console.log('response', response);
+
     if (response.status === 200) {
-      const dataPasif: any[] = [];
+      let dataPasif: any[] = [];
       const dataAktifSell: any[] = [];
       const pasif = response.data.hasil.pasif;
       const aktif = response.data.hasil.aktif;
+      let tempData: any[] = [];
+      let tempBuy: any = [];
+      let tempSell: any = [];
+      aktif.buy.forEach((data: any) => {
+        let fixIsiJobsheetID = listSelectJobSheetID.filter(
+          (job: ISelectJobSheetID) => job.value === data.fix_isijobsheet_id
+        );
+        if (fixIsiJobsheetID.length > 0) {
+          tempBuy.push({
+            ...data,
+            fix_isijobsheet_id: fixIsiJobsheetID[0],
+          });
+        } else {
+          tempBuy.push(data);
+        }
+      });
+      setTitle(aktif.tableatas.kodeshipment);
+      setLokasiStuffing(aktif.tableatas.lokasistuffing);
+      setListContainer(response.data.hasil.container);
+      aktif.sell.forEach((data: any) => {
+        let fixIsiJobsheetID = listSelectJobSheetID.filter(
+          (job: ISelectJobSheetID) => job.value === data.fix_isijobsheet_id
+        );
+        if (fixIsiJobsheetID.length > 0) {
+          tempSell.push({
+            ...data,
+            fix_isijobsheet_id: fixIsiJobsheetID[0],
+          });
+        } else {
+          tempSell.push(data);
+        }
+      });
+      setDataAktifBuy(tempBuy);
+      setDataAktifSell(tempSell);
+
       for (let key in pasif) {
         let tempData: any[] = [];
         pasif[key].map((da: any) => {
@@ -431,94 +643,262 @@ function App() {
           data: tempData,
         });
       }
-      aktif.sell.map((da: any) => {
-        let temp: IDataValue[] = [];
-        for (let keyDt in da) {
-          temp.push({
-            label: keyDt,
-            value: da[keyDt],
-          });
-        }
-        dataAktifSell.push(temp);
-      });
-      // pasif[key].map((da: any) => {
-      //   let temp: IDataValue[] = [];
-      //   for (let keyDt in da) {
-      //     temp.push({
-      //       label: keyDt,
-      //       value: da[keyDt],
-      //     });
-      //   }
-      //   tempData.push(temp);
-      // });
-      let tempData: any[] = [];
-      aktif.buy.map((da: any) => {
-        let temp: IDataValue[] = [];
-        for (let keyDt in da) {
-          temp.push({
-            label: keyDt,
-            value: da[keyDt],
-          });
-        }
-        tempData.push(temp);
-      });
-      dataPasif.push({
-        label: '',
-        data: tempData,
-      });
-      console.log('dataPasif', dataPasif);
-      console.log('dataAktifSell', dataAktifSell);
+      const humico = dataPasif.filter((dt: any) => dt.label === 'humico');
+      dataPasif = dataPasif.filter((dt: any) => dt.label !== 'humico');
+      setDataTabelBuyingHumico(humico);
       setDataTabelDetailBuying(dataPasif);
       setDataTabelDetailSelling(dataAktifSell);
+      setDataAppHeaderForm({
+        sid: aktif.tableatas.sid ?? '',
+        mjid: aktif.tableatas.mjid ?? '',
+        emkl: aktif.tableatas.emkl ?? '',
+        ratePajak: aktif.tableatas.rate_pajak ?? '',
+        rateBonus: aktif.tableatas.rate_bonus ?? '',
+      });
     }
   };
 
+  const getBiayaLapangName = (id: string): string => {
+    let fixIsiJobsheetID = listSelectJobSheetID.filter(
+      (job: ISelectJobSheetID) => job.value === id
+    );
+    if (fixIsiJobsheetID.length > 0) {
+      return fixIsiJobsheetID[0].label;
+    }
+    return 'null';
+  };
+
+  const handlePostData = (e: any) => {
+    e.preventDefault();
+    setIsLoadingFetchPost(true);
+    let dataBuying: any[] = [];
+    let dataSelling: any[] = [];
+    listDataBuying.forEach((data: IDataBuying) => {
+      dataBuying.push({
+        nominaldipakai: data.nominalDipakai1IDR2USD,
+        nominal: data.nominal,
+        kurs: data.kurs,
+        nominaldolar: data.nominalDollar,
+        biayalapangan: data.fixIsiJobsheetID?.value ?? null,
+      });
+    });
+    listDataSelling.forEach((data: IDataSeling) => {
+      dataSelling.push({
+        nominaldipakai: data.nominalDipakai1IDR2USD,
+        nominal: data.nominal,
+        kurs: data.kurs,
+        nominaldolar: data.nominalDollar,
+        biayalapangan: data.fixIsiJobsheetID?.value ?? null,
+      });
+    });
+    dataAktifBuy.forEach((data: any) => {
+      dataBuying.push({
+        nominaldipakai: data.nominaldipakai,
+        nominal: data.nominal,
+        kurs: data.kurs,
+        nominaldolar: data.nominaldolar,
+        biayalapangan:
+          data.fix_isijobsheet_id?.value ?? data.fix_isijobsheet_id,
+        jid: data.jid,
+      });
+    });
+    dataAktifSell.forEach((data: any) => {
+      dataSelling.push({
+        nominaldipakai: data.nominaldipakai,
+        nominal: data.nominal,
+        kurs: data.kurs,
+        nominaldolar: data.nominaldolar,
+        biayalapangan:
+          data.fix_isijobsheet_id?.value ?? data.fix_isijobsheet_id,
+        jid: data.jid,
+      });
+    });
+
+    const data = {
+      jobsheet: {
+        mjid: dataAppHeaderForm.mjid ?? 0,
+        sid: dataAppHeaderForm.sid ?? 0,
+        js: {
+          rate_pajak: dataAppHeaderForm.ratePajak ?? 0,
+          bonus: dataAppHeaderForm.rateBonus ?? 0,
+          emkl: dataAppHeaderForm.emkl ?? 0,
+        },
+        buying: dataBuying,
+        selling: dataSelling,
+      },
+    };
+    console.log('data', data);
+    axios
+      .post('/api/apcargo/public/postDataJS', data, CONFIG_FETCH)
+      .then((res: any) => {
+        setIsLoadingFetchPost(false);
+        toast({
+          title: 'Success',
+          description: 'Success post data.',
+          status: 'success',
+          position: 'bottom-right',
+          duration: 5000,
+          isClosable: true,
+        });
+      })
+      .catch((err: any) => {
+        setIsLoadingFetchPost(false);
+        toast({
+          title: 'Failed',
+          description: 'Pailed post data.',
+          status: 'error',
+          position: 'bottom-right',
+          duration: 5000,
+          isClosable: true,
+        });
+        console.log('err', err);
+      });
+  };
+
   useEffect(() => {
+    getDataJobsheetID();
     const paramArr = window.location.href.split('/');
     const paramsId = paramArr[paramArr.length - 1];
-    console.log('paramsId', paramsId);
     if (paramsId) {
       getDataPanel(paramsId);
     }
-    getDataJobsheetID();
   }, []);
 
   return (
     <Box p='20px'>
-      <Box w='full'>
+      <Box w='full' mt='20px'>
         {/* Header App */}
         <Box w='full' mb='25px'>
-          <Box
-            w={{
-              base: '100%',
-              sm: '100%',
-              md: '50%',
-              xl: '50%',
-            }}
-          >
-            <Table size='sm'>
-              <Tbody>
-                <Tr>
+          <Box w='full'>
+            <Text fontSize='24px' fontWeight='bold' color='#000000'>
+              {title}
+            </Text>
+            {title && (
+              <Text mr='15px' fontSize='20px' fontWeight='bold' color='#000000'>
+                Lokasi Stuffing: {lokasiStuffing ? `${lokasiStuffing}` : 'null'}
+              </Text>
+            )}
+            {listContainer.map((container: any, index: number) => (
+              <Flex alignItems='center'>
+                <Text
+                  mr='15px'
+                  fontSize='20px'
+                  fontWeight='bold'
+                  color='#000000'
+                >
+                  No Container: {container?.kodecontainer ?? 'null'}
+                </Text>
+                <Text
+                  mr='15px'
+                  fontSize='20px'
+                  fontWeight='bold'
+                  color='#000000'
+                >
+                  No Seal: {container?.noseal ?? 'null'}
+                </Text>
+                <Text
+                  mr='15px'
+                  fontSize='20px'
+                  fontWeight='bold'
+                  color='#000000'
+                >
+                  Capacity: {container?.nama ?? 'null'}
+                </Text>
+                <Text
+                  mr='15px'
+                  fontSize='20px'
+                  fontWeight='bold'
+                  color='#000000'
+                >
+                  Notes: {container?.notes ?? 'null'}
+                </Text>
+              </Flex>
+            ))}
+            {dataAppHeaderForm.mjid && (
+              <a
+                href={`https://panellokasee.host/apcargo/public/admin/fix_mainjobsheet/lihatjobsheet/${dataAppHeaderForm.mjid}`}
+                rel='noreferrer'
+                target='_blank'
+              >
+                <Button
+                  width='150px'
+                  height='35px'
+                  bgColor='blue.300'
+                  color='white'
+                  mb='25px'
+                  mt='20px'
+                >
+                  Lihat hasil
+                </Button>
+              </a>
+            )}
+            <Box
+              w={{
+                base: '100%',
+                sm: '100%',
+                md: '50%',
+                xl: '50%',
+              }}
+            >
+              <Table size='sm'>
+                <Tbody>
+                  <Tr>
+                    <Td borderStyle='none' px='0px' py='4px'>
+                      EMKL
+                    </Td>
+                    <Td borderStyle='none' px='0px' py='4px'>
+                      <Input
+                        name='emkl'
+                        value={dataAppHeaderForm.emkl}
+                        onChange={handleChangeDataAppHeaderForm}
+                        height='30px'
+                      />
+                    </Td>
+                  </Tr>
+                  <Tr>
+                    <Td borderStyle='none' px='0px' py='4px'>
+                      Rate Pajak
+                    </Td>
+                    <Td borderStyle='none' px='0px' py='4px'>
+                      <Input
+                        name='ratePajak'
+                        // value={convertUSDFormat(
+                        //   Number(dataAppHeaderForm.ratePajak),
+                        //   'IDR'
+                        // )}
+                        value={dataAppHeaderForm.ratePajak}
+                        onChange={handleChangeDataAppHeaderForm}
+                        height='30px'
+                        type='string'
+                      />
+                    </Td>
+                  </Tr>
+                  <Tr>
+                    <Td borderStyle='none' px='0px' py='4px'>
+                      Rate Bonus
+                    </Td>
+                    <Td borderStyle='none' px='0px' py='4px'>
+                      <Input
+                        name='rateBonus'
+                        // value={convertUSDFormat(
+                        //   Number(dataAppHeaderForm.rateBonus),
+                        //   'IDR'
+                        // )}
+                        value={dataAppHeaderForm.rateBonus}
+                        onChange={handleChangeDataAppHeaderForm}
+                        height='30px'
+                        type='string'
+                      />
+                    </Td>
+                  </Tr>
+                  {/* <Tr>
                   <Td borderStyle='none' px='0px' py='4px'>
-                    EMKL
+                    MJID
                   </Td>
                   <Td borderStyle='none' px='0px' py='4px'>
                     <Input
-                      name='emkl'
-                      value={dataAppHeaderForm.emkl}
-                      onChange={handleChangeDataAppHeaderForm}
-                      height='30px'
-                    />
-                  </Td>
-                </Tr>
-                <Tr>
-                  <Td borderStyle='none' px='0px' py='4px'>
-                    Rate Pajak
-                  </Td>
-                  <Td borderStyle='none' px='0px' py='4px'>
-                    <Input
-                      name='ratePajak'
-                      value={dataAppHeaderForm.ratePajak}
+                      name='mjid'
+                      value={dataAppHeaderForm.mjid}
                       onChange={handleChangeDataAppHeaderForm}
                       height='30px'
                       type='number'
@@ -527,20 +907,21 @@ function App() {
                 </Tr>
                 <Tr>
                   <Td borderStyle='none' px='0px' py='4px'>
-                    Rate Bonus
+                    SID
                   </Td>
                   <Td borderStyle='none' px='0px' py='4px'>
                     <Input
-                      name='rateBonus'
-                      value={dataAppHeaderForm.rateBonus}
+                      name='sid'
+                      value={dataAppHeaderForm.sid}
                       onChange={handleChangeDataAppHeaderForm}
                       height='30px'
                       type='number'
                     />
                   </Td>
-                </Tr>
-              </Tbody>
-            </Table>
+                </Tr> */}
+                </Tbody>
+              </Table>
+            </Box>
           </Box>
         </Box>
         {/* Form App */}
@@ -578,6 +959,7 @@ function App() {
                         onChange={handleChangeJobSheetIDBuying}
                         placeholder='Select jobsheet id'
                         styles={colourStyles}
+                        value={dataBuyingForm.fixIsiJobsheetID}
                       />
                     </Td>
                   </Tr>
@@ -588,10 +970,14 @@ function App() {
                     <Td borderStyle='none' px='0px' py='4px'>
                       <Input
                         name='nominalDipakai1IDR2USD'
-                        value={dataBuyingForm.nominalDipakai1IDR2USD}
                         onChange={handleChangeDataFormBuying}
-                        type='number'
                         height='30px'
+                        // value={convertUSDFormat(
+                        //   Number(dataBuyingForm.nominalDipakai1IDR2USD),
+                        //   'IDR'
+                        // )}
+                        value={dataBuyingForm.nominalDipakai1IDR2USD}
+                        type='string'
                       />
                     </Td>
                   </Tr>
@@ -602,10 +988,14 @@ function App() {
                     <Td borderStyle='none' px='0px' py='4px'>
                       <Input
                         name='nominal'
-                        value={dataBuyingForm.nominal}
                         onChange={handleChangeDataFormBuying}
-                        type='number'
                         height='30px'
+                        // value={convertUSDFormat(
+                        //   Number(dataBuyingForm.nominal),
+                        //   'IDR'
+                        // )}
+                        value={dataBuyingForm.nominal}
+                        type='string'
                       />
                     </Td>
                   </Tr>
@@ -616,10 +1006,14 @@ function App() {
                     <Td borderStyle='none' px='0px' py='4px'>
                       <Input
                         name='kurs'
-                        value={dataBuyingForm.kurs}
                         onChange={handleChangeDataFormBuying}
-                        type='number'
                         height='30px'
+                        // value={convertUSDFormat(
+                        //   Number(dataBuyingForm.kurs),
+                        //   'IDR'
+                        // )}
+                        value={dataBuyingForm.kurs}
+                        type='string'
                       />
                     </Td>
                   </Tr>
@@ -630,24 +1024,38 @@ function App() {
                     <Td borderStyle='none' px='0px' py='4px'>
                       <Input
                         name='nominalDollar'
-                        value={dataBuyingForm.nominalDollar}
                         onChange={handleChangeDataFormBuying}
-                        type='number'
                         height='30px'
+                        // value={convertUSDFormat(
+                        //   Number(dataBuyingForm.nominalDollar),
+                        //   'NominalDollar'
+                        // )}
+                        value={dataBuyingForm.nominalDollar}
+                        // value={dataBuyingForm.nominalDollar}
+                        type='text'
                       />
                     </Td>
                   </Tr>
                 </Tbody>
               </Table>
-              <Flex justifyContent='center' w='full' mt='10px'>
+              <Flex justifyContent='center' w='full' mt='10px' gridGap='15px'>
                 <Button
-                  width='200px'
+                  width='150px'
                   height='35px'
                   bgColor='green.300'
                   color='white'
                   onClick={handleAddUpdateListDataBuying}
                 >
                   {idEditFormBuying ? 'Update' : 'Add'}
+                </Button>
+                <Button
+                  width='150px'
+                  height='35px'
+                  bgColor='yellow.300'
+                  color='white'
+                  onClick={() => handleClearFormData('buying')}
+                >
+                  Cancel
                 </Button>
               </Flex>
             </Box>
@@ -675,6 +1083,7 @@ function App() {
                         onChange={handleChangeJobSheetIDSelling}
                         placeholder='Select jobsheet id'
                         styles={colourStyles}
+                        value={dataSellingForm.fixIsiJobsheetID}
                       />
                     </Td>
                   </Tr>
@@ -685,10 +1094,14 @@ function App() {
                     <Td borderStyle='none' px='0px' py='4px'>
                       <Input
                         name='nominalDipakai1IDR2USD'
-                        value={dataSellingForm.nominalDipakai1IDR2USD}
                         onChange={handleChangeDataFormSelling}
-                        type='number'
                         height='30px'
+                        // value={convertUSDFormat(
+                        //   Number(dataSellingForm.nominalDipakai1IDR2USD),
+                        //   'IDR'
+                        // )}
+                        value={dataSellingForm.nominalDipakai1IDR2USD}
+                        type='string'
                       />
                     </Td>
                   </Tr>
@@ -699,10 +1112,13 @@ function App() {
                     <Td borderStyle='none' px='0px' py='4px'>
                       <Input
                         name='nominal'
-                        value={dataSellingForm.nominal}
                         onChange={handleChangeDataFormSelling}
-                        type='number'
                         height='30px'
+                        // value={convertUSDFormat(
+                        //   Number(dataSellingForm.nominal),
+                        //   'IDR'
+                        // )}
+                        value={dataSellingForm.nominal}
                       />
                     </Td>
                   </Tr>
@@ -713,10 +1129,14 @@ function App() {
                     <Td borderStyle='none' px='0px' py='4px'>
                       <Input
                         name='kurs'
-                        value={dataSellingForm.kurs}
                         onChange={handleChangeDataFormSelling}
-                        type='number'
                         height='30px'
+                        // value={convertUSDFormat(
+                        //   Number(dataSellingForm.kurs),
+                        //   'IDR'
+                        // )}
+                        value={dataSellingForm.kurs}
+                        type='string'
                       />
                     </Td>
                   </Tr>
@@ -727,24 +1147,37 @@ function App() {
                     <Td borderStyle='none' px='0px' py='4px'>
                       <Input
                         name='nominalDollar'
+                        // value={convertUSDFormat(
+                        //   Number(dataSellingForm.nominalDollar),
+                        //   'NominalDollar'
+                        // )}
                         value={dataSellingForm.nominalDollar}
                         onChange={handleChangeDataFormSelling}
-                        type='number'
+                        type='text'
                         height='30px'
                       />
                     </Td>
                   </Tr>
                 </Tbody>
               </Table>
-              <Flex justifyContent='center' w='full' mt='10px'>
+              <Flex justifyContent='center' w='full' mt='10px' gridGap='15px'>
                 <Button
-                  width='200px'
+                  width='150px'
                   height='35px'
                   bgColor='green.300'
                   color='white'
                   onClick={handleAddUpdateListDataSelling}
                 >
                   {idEditFormSelling ? 'Update' : 'Add'}
+                </Button>
+                <Button
+                  width='150px'
+                  height='35px'
+                  bgColor='yellow.300'
+                  color='white'
+                  onClick={() => handleClearFormData('selling')}
+                >
+                  Cancel
                 </Button>
               </Flex>
             </Box>
@@ -860,6 +1293,23 @@ function App() {
                         />
                       )
                     )}
+                    {dataAktifBuy.map((data: any, index: number) => (
+                      <TdTabelDetail
+                        haveAction={true}
+                        name={
+                          data.fix_isijobsheet_id?.label ??
+                          getBiayaLapangName(data.fix_isijobsheet_id)
+                        }
+                        total={data.nominaldipakai}
+                        nominal={data.nominal}
+                        kurs={data.kurs}
+                        nominalDolar={data.nominaldolar}
+                        key={index}
+                        onEdit={handleEditDataAktifBuy}
+                        onDelete={handleDeleteDataAktifBuy}
+                        id={data.id}
+                      />
+                    ))}
                     {dataTabelDetailBuying.map(
                       (data: IDataTabelBuying, index: number) => (
                         <>
@@ -871,6 +1321,7 @@ function App() {
                             fontWeight='bold'
                             ml='4px'
                             textTransform='capitalize'
+                            key={index}
                           >
                             {data.label}
                           </Text>
@@ -885,12 +1336,54 @@ function App() {
                               />
                             ));
                           })} */}
-                          {data.data.map((dt: any) => {
-                            return RenderDetailTabelBuying(dt);
+                          {data.data.map((dt: any, index: number) => {
+                            return (
+                              <RenderDetailTabelBuying key={index} data={dt} />
+                            );
                           })}
                         </>
                       )
                     )}
+                    {dataTabelBuyingHumico.map((data: any, index: number) => (
+                      <>
+                        <Text
+                          mt='10px'
+                          fontSize='13px'
+                          borderStyle='none'
+                          px='0px'
+                          fontWeight='bold'
+                          ml='4px'
+                          textTransform='capitalize'
+                          key={index}
+                        >
+                          {data.label}
+                        </Text>
+                        {data.data.map((dt: any, index2: number) => {
+                          return (
+                            <>
+                              <TdTabelDetail
+                                name={dt[0].label ?? ''}
+                                total={dt[0].value ?? 0}
+                                key={index2}
+                                isHumico={true}
+                              />
+                              <TdTabelDetail
+                                name={dt[1].label ?? ''}
+                                total={dt[1].value ?? 0}
+                                key={index2}
+                                isHumico={true}
+                              />
+                            </>
+                          );
+                          // return dt.map((d: any, index3: number) => (
+                          //   <TdTabelDetail
+                          //     name={d.label ?? ''}
+                          //     total={dt.value ?? 'null'}
+                          //   />
+                          // ));
+                        })}
+                      </>
+                    ))}
                   </Tbody>
                 </Table>
               </Box>
@@ -994,6 +1487,23 @@ function App() {
                         />
                       )
                     )}
+                    {dataAktifSell.map((data: any, index: number) => (
+                      <TdTabelDetail
+                        haveAction={true}
+                        name={
+                          data.fix_isijobsheet_id?.label ??
+                          getBiayaLapangName(data.fix_isijobsheet_id)
+                        }
+                        total={data.nominaldipakai}
+                        nominal={data.nominal}
+                        kurs={data.kurs}
+                        nominalDolar={data.nominaldolar}
+                        key={index}
+                        onEdit={handleEditDataAktifSell}
+                        onDelete={handleDeleteDataAktifSell}
+                        id={data.id}
+                      />
+                    ))}
                     {dataTabelDetailSelling.map(
                       (data: IDataTabelBuying, index: number) => (
                         <>
@@ -1005,6 +1515,7 @@ function App() {
                             fontWeight='bold'
                             ml='4px'
                             textTransform='capitalize'
+                            key={index}
                           >
                             {data.label}
                           </Text>
@@ -1019,8 +1530,10 @@ function App() {
           />
         ));
       })} */}
-                          {data.data.map((dt: any) => {
-                            return RenderDetailTabelBuying(dt);
+                          {data.data.map((dt: any, index: number) => {
+                            return (
+                              <RenderDetailTabelBuying data={dt} key={index} />
+                            );
                           })}
                         </>
                       )
@@ -1033,7 +1546,16 @@ function App() {
         </Box>
         {/* Footer App */}
         <Flex w='full' my='25px' justifyContent='center'>
-          <Button bgColor='green.300' color='white' w={320}>
+          <Button
+            bgColor='green.300'
+            color='white'
+            w={320}
+            onClick={handlePostData}
+            type='submit'
+            isLoading={isLoadingFetchPost}
+            _hover={{}}
+            _focus={{}}
+          >
             POST API
           </Button>
         </Flex>
@@ -1066,32 +1588,15 @@ function App() {
 
 export default App;
 
-const RenderDetailTabelBuying: React.FC<any> = (props) => {
-  // 0: {label: "id", value: "2637"}
-  // 1: {label: "deleted_at", value: null}
-  // 2: {label: "created_at", value: "2021-08-16 10:34:33"}
-  // 3: {label: "nama", value: "EMKL"}
-  // 4: {label: "kode", value: "41"}
-  // 5: {label: "fix_shipment_id", value: "1344"}
-  // 6: {label: "nominal", value: "1250000"}
-  // 7: {label: "keterangan", value: "Kinarya/0821-8478"}
-  // 8: {label: "file", value: null}
-  // 9: {label: "dates", value: null}
-  // 10: {label: "autosplit", value: null}
-  // 11: {label: "dolar", value: "0"}
-  // 12: {label: "kurs", value: "0"}
-  // 13: {label: "tipe", value: null}
-  // 14: {label: "fix_coa_id_pph", value: "0"}
-  // 15: {label: "fix_coa_id_kredit", value: "21"}
-  // 16: {label: "fix_coa_id_pphk", value: "0"}
-  // 17: {label: "nominalkredit", value: "1250000"}
-  // 18: {label: "rekening_id", value: null}
-  // 19: {label: "fix_coahelper_id", value: "108"}
-  const selectName = props.filter((dt: any) => dt.label === 'nama');
-  const selectTotal = props.filter((dt: any) => dt.label === 'dolar');
-  const selectNominal = props.filter((dt: any) => dt.label === 'nominal');
-  const selectKurs = props.filter((dt: any) => dt.label === 'kurs');
-  const selectNominalDolar = props.filter(
+interface IPropsRender {
+  data: any;
+}
+const RenderDetailTabelBuying: React.FC<IPropsRender> = (props) => {
+  const selectName = props.data.filter((dt: any) => dt.label === 'nama');
+  const selectTotal = props.data.filter((dt: any) => dt.label === 'dolar');
+  const selectNominal = props.data.filter((dt: any) => dt.label === 'nominal');
+  const selectKurs = props.data.filter((dt: any) => dt.label === 'kurs');
+  const selectNominalDolar = props.data.filter(
     (dt: any) => dt.label === 'nominalkredit'
   );
   return (
