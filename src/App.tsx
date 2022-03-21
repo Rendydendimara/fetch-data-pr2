@@ -758,8 +758,8 @@ function App() {
   useEffect(() => {
     getDataJobsheetID();
     if (document.location) {
-      // let loc:any = document.location;
-      let params: any = new URL(document.location).searchParams;
+      let loc: any = document.location;
+      let params: any = new URL(loc).searchParams;
       let paramsId: any = params.get('id');
       // const paramArr = window.location.href.split('/');
       // const paramsId = paramArr[paramArr.length - 1];
