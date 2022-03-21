@@ -138,7 +138,7 @@ function App() {
     // const response = await ApiGetDataJobsheetID();
 
     const response = await axios.get(
-      'https://panellokasee.host/apcargo/public/admin/getJSbuyingSelling',
+      '/api/apcargo/public/admin/getJSbuyingSelling',
       CONFIG_FETCH
     );
 
@@ -582,7 +582,7 @@ function App() {
 
   const getDataPanel = async (id: string) => {
     const response = await axios.get(
-      `https://panellokasee.host/apcargo/public/admin/getJSData/${id}`,
+      `/api/apcargo/public/admin/getJSData/${id}`,
       CONFIG_FETCH
     );
 
@@ -729,11 +729,7 @@ function App() {
     };
     console.log('data', data);
     axios
-      .post(
-        'https://panellokasee.host/apcargo/public/postDataJS',
-        data,
-        CONFIG_FETCH
-      )
+      .post('/api/apcargo/public/postDataJS', data, CONFIG_FETCH)
       .then((res: any) => {
         setIsLoadingFetchPost(false);
         toast({
@@ -761,10 +757,15 @@ function App() {
 
   useEffect(() => {
     getDataJobsheetID();
-    const paramArr = window.location.href.split('/');
-    const paramsId = paramArr[paramArr.length - 1];
-    if (paramsId) {
-      getDataPanel(paramsId);
+    if (document.location) {
+      // let loc:any = document.location;
+      let params: any = new URL(document.location).searchParams;
+      let paramsId: any = params.get('id');
+      // const paramArr = window.location.href.split('/');
+      // const paramsId = paramArr[paramArr.length - 1];
+      if (paramsId) {
+        getDataPanel(paramsId);
+      }
     }
   }, []);
 
@@ -820,7 +821,7 @@ function App() {
             ))}
             {dataAppHeaderForm.mjid && (
               <a
-                href={`https://panellokasee.host/apcargo/public/admin/fix_mainjobsheet/lihatjobsheet/${dataAppHeaderForm.mjid}`}
+                href={`/api/apcargo/public/admin/fix_mainjobsheet/lihatjobsheet/${dataAppHeaderForm.mjid}`}
                 rel='noreferrer'
                 target='_blank'
               >
