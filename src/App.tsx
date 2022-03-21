@@ -138,7 +138,7 @@ function App() {
     // const response = await ApiGetDataJobsheetID();
 
     const response = await axios.get(
-      '/api/apcargo/public/admin/getJSbuyingSelling',
+      'https://panellokasee.host/apcargo/public/admin/getJSbuyingSelling',
       CONFIG_FETCH
     );
 
@@ -582,7 +582,7 @@ function App() {
 
   const getDataPanel = async (id: string) => {
     const response = await axios.get(
-      `/api/apcargo/public/admin/getJSData/${id}`,
+      `https://panellokasee.host/apcargo/public/admin/getJSData/${id}`,
       CONFIG_FETCH
     );
 
@@ -729,7 +729,11 @@ function App() {
     };
     console.log('data', data);
     axios
-      .post('/api/apcargo/public/postDataJS', data, CONFIG_FETCH)
+      .post(
+        'https://panellokasee.host/apcargo/public/postDataJS',
+        data,
+        CONFIG_FETCH
+      )
       .then((res: any) => {
         setIsLoadingFetchPost(false);
         toast({
